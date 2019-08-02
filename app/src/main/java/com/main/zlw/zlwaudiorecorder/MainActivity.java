@@ -36,6 +36,8 @@ import butterknife.OnClick;
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
     private static final String TAG = MainActivity.class.getSimpleName();
 
+    private static final float MAX_DB = 130f;
+
     @BindView(R.id.btRecord)
     Button btRecord;
     @BindView(R.id.btStop)
@@ -51,7 +53,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     @BindView(R.id.tbEncoding)
     RadioGroup tbEncoding;
     @BindView(R.id.audioView)
-    AudioView audioView;
+    HollowLumpAudioView audioView;
     @BindView(R.id.spUpStyle)
     Spinner spUpStyle;
     @BindView(R.id.spDownStyle)
@@ -200,7 +202,8 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         });
         recordManager.setRecordSoundSizeListener(new RecordSoundSizeListener() {
             @Override
-            public void onSoundSize(int soundSize) {
+            public void onSoundSize(double soundSize) {
+                audioView.addNewTrigger((float) (Math.min(MAX_DB, soundSize) / MAX_DB));
                 tvSoundSize.setText(String.format(Locale.getDefault(), "声音大小：%s db", soundSize));
             }
         });
@@ -210,12 +213,12 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 Toast.makeText(MainActivity.this, "录音文件： " + result.getAbsolutePath(), Toast.LENGTH_SHORT).show();
             }
         });
-        recordManager.setRecordFftDataListener(new RecordFftDataListener() {
-            @Override
-            public void onFftData(byte[] data) {
-                audioView.setWaveData(data);
-            }
-        });
+        //recordManager.setRecordFftDataListener(new RecordFftDataListener() {
+        //    @Override
+        //    public void onFftData(byte[] data) {
+        //        audioView.setWaveData(data);
+        //    }
+        //});
     }
 
     @OnClick({R.id.btRecord, R.id.btStop, R.id.jumpTestActivity})
@@ -263,10 +266,10 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
         switch (parent.getId()) {
             case R.id.spUpStyle:
-                audioView.setStyle(AudioView.ShowStyle.getStyle(STYLE_DATA[position]), audioView.getDownStyle());
+                //audioView.setStyle(AudioView.ShowStyle.getStyle(STYLE_DATA[position]), audioView.getDownStyle());
                 break;
             case R.id.spDownStyle:
-                audioView.setStyle(audioView.getUpStyle(), AudioView.ShowStyle.getStyle(STYLE_DATA[position]));
+                //audioView.setStyle(audioView.getUpStyle(), AudioView.ShowStyle.getStyle(STYLE_DATA[position]));
                 break;
             default:
                 break;
