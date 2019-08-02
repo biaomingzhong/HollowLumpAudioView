@@ -10,6 +10,6 @@ public interface RecordSoundSizeListener {
      *
      * @param soundSize 当前音量大小
      */
-    void onSoundSize(int soundSize);
+    void onSoundSize(double soundSize);
 
 }

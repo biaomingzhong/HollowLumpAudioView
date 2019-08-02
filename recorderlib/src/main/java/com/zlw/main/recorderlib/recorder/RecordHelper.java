@@ -197,7 +197,7 @@ public class RecordHelper {
 
     private FftFactory fftFactory = new FftFactory(FftFactory.Level.Original);
 
-    private void notifyData(final byte[] data) {
+    private void notifyData(final byte[] data, final int readSize) {
         if (recordDataListener == null && recordSoundSizeListener == null && recordFftDataListener == null) {
             return;
         }
@@ -209,11 +209,11 @@ public class RecordHelper {
                 }
 
                 if (recordFftDataListener != null || recordSoundSizeListener != null) {
+                    if (recordSoundSizeListener != null) {
+                        recordSoundSizeListener.onSoundSize(getDb(data, readSize));
+                    }
                     byte[] fftData = fftFactory.makeFftData(data);
                     if (fftData != null) {
-                        if (recordSoundSizeListener != null) {
-                            recordSoundSizeListener.onSoundSize(getDb(fftData));
-                        }
                         if (recordFftDataListener != null) {
                             recordFftDataListener.onFftData(fftData);
                         }
@@ -221,6 +221,17 @@ public class RecordHelper {
                 }
             }
         });
+    }
+
+    private double getDb(byte[] data, int readSize) {
+        long v = 0;
+        // 将 buffer 内容取出，进行平方和运算
+        for (byte datum : data) {
+            v += datum * datum;
+        }
+        // 平方和除以数据总长度，得到音量大小。
+        double mean = v / (double) readSize;
+        return 10 * Math.log10(mean);
     }
 
     private int getDb(byte[] data) {
@@ -290,7 +301,7 @@ public class RecordHelper {
 
                 while (state == RecordState.RECORDING) {
                     int end = audioRecord.read(byteBuffer, 0, byteBuffer.length);
-                    notifyData(byteBuffer);
+                    notifyData(byteBuffer, end);
                     fos.write(byteBuffer, 0, end);
                     fos.flush();
                 }
@@ -333,7 +344,7 @@ public class RecordHelper {
                     if (mp3EncodeThread != null) {
                         mp3EncodeThread.addChangeBuffer(new Mp3EncodeThread.ChangeBuffer(byteBuffer, end));
                     }
-                    notifyData(ByteUtils.toBytes(byteBuffer));
+                    notifyData(ByteUtils.toBytes(byteBuffer), end);
                 }
                 audioRecord.stop();
             } catch (Exception e) {
