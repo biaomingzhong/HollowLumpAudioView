@@ -21,11 +21,13 @@ import com.zlw.loggerlib.Logger;
 import com.zlw.main.recorderlib.RecordManager;
 import com.zlw.main.recorderlib.recorder.RecordConfig;
 import com.zlw.main.recorderlib.recorder.RecordHelper;
+import com.zlw.main.recorderlib.recorder.listener.RecordDataListener;
 import com.zlw.main.recorderlib.recorder.listener.RecordFftDataListener;
 import com.zlw.main.recorderlib.recorder.listener.RecordResultListener;
 import com.zlw.main.recorderlib.recorder.listener.RecordSoundSizeListener;
 import com.zlw.main.recorderlib.recorder.listener.RecordStateListener;
 
+import com.zlw.main.recorderlib.utils.ByteUtils;
 import java.io.File;
 import java.util.Locale;
 
@@ -36,7 +38,8 @@ import butterknife.OnClick;
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
     private static final String TAG = MainActivity.class.getSimpleName();
 
-    private static final float MAX_DB = 130f;
+    private static final float MAX_DB = 80f;
+    public static double REFERENCE = 0.00002;
 
     @BindView(R.id.btRecord)
     Button btRecord;
@@ -70,6 +73,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
         initAudioView();
+        audioView.setRadius(16);
         initEvent();
         initRecord();
         AndPermission.with(this)
@@ -200,17 +204,34 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 Logger.i(TAG, "onError %s", error);
             }
         });
-        recordManager.setRecordSoundSizeListener(new RecordSoundSizeListener() {
-            @Override
-            public void onSoundSize(double soundSize) {
-                audioView.addNewTrigger((float) (Math.min(MAX_DB, soundSize) / MAX_DB));
-                tvSoundSize.setText(String.format(Locale.getDefault(), "声音大小：%s db", soundSize));
-            }
-        });
+        //recordManager.setRecordSoundSizeListener(new RecordSoundSizeListener() {
+        //    @Override
+        //    public void onSoundSize(double soundSize) {
+        //        audioView.addNewTrigger((float) (Math.min(MAX_DB, soundSize) / MAX_DB));
+        //        tvSoundSize.setText(String.format(Locale.getDefault(), "声音大小：%s db", soundSize));
+        //    }
+        //});
         recordManager.setRecordResultListener(new RecordResultListener() {
             @Override
             public void onResult(File result) {
                 Toast.makeText(MainActivity.this, "录音文件： " + result.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+            }
+        });
+        recordManager.setRecordDataListener(new RecordDataListener() {
+            @Override public void onData(byte[] data) {
+                short[] source = ByteUtils.toShorts(data);
+                double average = 0.0;
+                int bufferSize = 44100;
+                for (short s : source)
+                {
+                    average += Math.abs(s);
+                }
+
+                double x = average / bufferSize;
+                double pressure = x / 51805.5336;
+                double soundSize = (20 * Math.log10(pressure/REFERENCE));
+                audioView.addNewTrigger((float) (Math.min(MAX_DB, soundSize) / MAX_DB));
+                tvSoundSize.setText(String.format(Locale.getDefault(), "声音大小：%s db", soundSize));
             }
         });
         //recordManager.setRecordFftDataListener(new RecordFftDataListener() {

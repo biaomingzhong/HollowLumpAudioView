@@ -3,8 +3,10 @@ package com.main.zlw.zlwaudiorecorder;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.util.Pair;
@@ -22,13 +24,15 @@ import java.util.LinkedList;
  */
 public class HollowLumpAudioView extends View {
   private static final String TAG = "HollowLumpAudioView";
-  private static final int DEFAULT_LUMP_WIDTH = 6;
-  private static final int DEFAULT_LUMP_SPACE = 2;
-  private static final int DEFAULT_ANIMATE_MS = 400;
-  private static final int DEFAULT_LUMP_COLOR = Color.parseColor("#F93351");
+  private static final int DEFAULT_LUMP_WIDTH = 8;
+  private static final int DEFAULT_LUMP_SPACE = 12;
+  private static final int DEFAULT_ANIMATE_MS = 550;
+  private static final int DEFAULT_LUMP_START_COLOR = Color.parseColor("#FB523B");
+  private static final int DEFAULT_LUMP_END_COLOR = Color.parseColor("#F93351");
   private static final long NANO_SEC_IN_MS = 1000000;
 
-  private int lumpColor = DEFAULT_LUMP_COLOR;
+  private int lumpStartColor = DEFAULT_LUMP_START_COLOR;
+  private int lumpEndColor = DEFAULT_LUMP_END_COLOR;
   private int lumpWidth = DEFAULT_LUMP_WIDTH;
   private int lumpSpace = DEFAULT_LUMP_SPACE;
   private int lumpSize;
@@ -44,9 +48,9 @@ public class HollowLumpAudioView extends View {
   private LumpData[] lumpDancing;
   private int[] lumpAvailable;
   private int radius = 0;
-  private long animateNsUnit = DEFAULT_ANIMATE_MS * NANO_SEC_IN_MS;
-  private int maxLumpCount = 24;
-  private int minLumpCount = 8;
+  private long animateNsTotalUnit = DEFAULT_ANIMATE_MS * NANO_SEC_IN_MS;
+  private long animateNsSingleUnit = 300 * NANO_SEC_IN_MS;
+  private int minLumpCount = 3;
   private long lastNewTriggerTimeInMs;
   private float newTrigger;
   private LinkedList<LumpData> recycledCache = new LinkedList<>();
@@ -74,8 +78,11 @@ public class HollowLumpAudioView extends View {
     lumpSize = lumpWidth + lumpSpace;
     lumpPaint = new Paint();
     lumpPaint.setAntiAlias(true);
-    lumpPaint.setColor(lumpColor);
     lumpPaint.setStyle(Paint.Style.FILL);
+    Shader shader = new LinearGradient(
+        0, 0, 0, 180, lumpStartColor, lumpEndColor, Shader.TileMode.CLAMP
+    );
+    lumpPaint.setShader(shader);
   }
 
   @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -110,7 +117,7 @@ public class HollowLumpAudioView extends View {
       lumpRect.top = (lumpMaxHeight - lumpHeight) / 2f;
       lumpRect.right = lumpRect.left + lumpWidth;
       lumpRect.bottom = lumpRect.top + lumpHeight;
-      drawRect(canvas, lumpRect);
+      drawRect(canvas, lumpRect, calcLumpOpacity(lumpHeight, lumpItem));
     }
 
     if (isDancingLumpExist) {
@@ -118,24 +125,36 @@ public class HollowLumpAudioView extends View {
     }
   }
 
+  private int calcLumpOpacity(float lumpHeight, LumpData lumpData) {
+    if (lumpData == null || lumpHeight == lumpMinHeight) {
+      return 26;
+    } else {
+      return (int) Math.floor(Math.round(lumpData.weight * 10) / 10f * 255);
+    }
+  }
+
   private float calcLumpHeight(long nowNs, int lumpMaxHeight, @Nullable LumpData lumpItem) {
-    float result;
+    float result = lumpMinHeight;
     if (lumpItem != null) {
       result =
           (float) (lumpMaxHeight
               * lumpItem.triggerRadio
               * lumpItem.weight
-              * Math.sin(Math.PI * (nowNs - lumpItem.startTime) / animateNsUnit));
-      Log.i(TAG, "found item calcLumpHeight: " + lumpItem);
-      Log.i(TAG, "found item calcLumpHeight result: " + result);
-    } else {
-      result = lumpMinHeight;
+              * Math.sin(Math.PI * ((nowNs - lumpItem.startTime) / (double) animateNsSingleUnit - (1 - lumpItem.weight))));
     }
-    return result;
+    return Math.max(lumpMinHeight, result);
   }
 
   private int calcNewLumpCount(float triggerRadio) {
-    return (int) Math.floor(triggerRadio * (maxLumpCount - minLumpCount)) + minLumpCount;
+    if (triggerRadio < 0.1) {
+      return minLumpCount;
+    } else if (triggerRadio < 0.5) {
+      return minLumpCount + (int) Math.floor(8 * triggerRadio);
+    } else if (triggerRadio < 0.7) {
+      return minLumpCount + (int) Math.floor(12 * triggerRadio);
+    } else {
+      return minLumpCount + (int) Math.floor(16 * triggerRadio);
+    }
   }
 
   private void addDancingLump(long nowNs, int newLumpCount, float triggerRadio) {
@@ -157,8 +176,8 @@ public class HollowLumpAudioView extends View {
       lumpDancing[newLumpFinalStart + i] =
           cacheGetLumpData(
               nowNs,
-              (float) Math.sin(
-                  (i) / (float) (newLumpFinalCount) * Math.PI + (Math.random() * 0.18 - 0.09)
+              Math.sin(
+                  i * Math.PI / newLumpFinalCount
               ),
               triggerRadio);
     }
@@ -177,7 +196,7 @@ public class HollowLumpAudioView extends View {
       }
 
       long leftTimeInNs = nowNs - lumpVal.startTime;
-      if (leftTimeInNs < animateNsUnit) {
+      if (leftTimeInNs < animateNsTotalUnit) {
         lumpAvailable[i] = 0;
         result = true;
         Log.i(TAG, "calcDancingLump: " + leftTimeInNs);
@@ -191,7 +210,7 @@ public class HollowLumpAudioView extends View {
     return result;
   }
 
-  private LumpData cacheGetLumpData(long startTime, float weight, float triggerRadio) {
+  private LumpData cacheGetLumpData(long startTime, double weight, float triggerRadio) {
     Log.i(TAG, "cacheGetLumpData: " + weight);
     if (recycledCache.size() > 0) {
       LumpData cache = recycledCache.pop();
@@ -221,7 +240,8 @@ public class HollowLumpAudioView extends View {
     }
   }
 
-  private void drawRect(Canvas canvas, RectF rect) {
+  private void drawRect(Canvas canvas, RectF rect, int opacity) {
+    lumpPaint.setAlpha(opacity);
     if (radius > 0) {
       canvas.drawRoundRect(rect, radius, radius, lumpPaint);
     } else {
@@ -250,16 +270,16 @@ public class HollowLumpAudioView extends View {
   private static class LumpData {
 
     private long startTime;
-    private float weight;
+    private double weight;
     private float triggerRadio;
 
-    LumpData(long startTime, float weight, float triggerRadio) {
+    LumpData(long startTime, double weight, float triggerRadio) {
       this.startTime = startTime;
       this.weight = weight;
       this.triggerRadio = triggerRadio;
     }
 
-    static LumpData recycle(LumpData cache, long startTime, float weight, float triggerRadio) {
+    static LumpData recycle(LumpData cache, long startTime, double weight, float triggerRadio) {
       cache.startTime = startTime;
       cache.weight = weight;
       cache.triggerRadio = triggerRadio;

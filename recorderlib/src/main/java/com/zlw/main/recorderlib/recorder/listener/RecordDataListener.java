@@ -11,5 +11,4 @@ public interface RecordDataListener {
      * @param data 当前音频数据
      */
     void onData(byte[] data);
-
 }
